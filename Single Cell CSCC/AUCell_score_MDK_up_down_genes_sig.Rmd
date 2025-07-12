@@ -1,0 +1,241 @@
+---
+title: "AUCell_score_MDK_up_down_genes_sig"
+output: html_document
+date: "2025-06-11"
+---
+
+
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+packages = c('AUCell', 'tidyverse', 'ggpubr', 'rstatix', 'ggplot2', 'RColorBrewer', 'Matrix' )
+
+for (pkg in packages) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+        message(paste(pkg, "is not installed. Installing now..."))
+        BiocManager::install(pkg)
+    } else {
+        message(paste(pkg, "is already installed. Skipping..."))
+    }
+}
+
+```
+
+
+
+```{r}
+.libPaths()
+
+```
+
+
+```{r}
+for (i in packages){library(pkg, character.only = TRUE)}
+```
+
+
+```{r}
+## Gene list up and down
+genes_list <- read_csv(file = )
+
+```
+
+```{r}
+#380 genes total
+#removing duplicates
+genes_list <- genes_list %>% distinct(genes, status, .keep_all = TRUE)
+table(genes_list$status)
+# down   up 
+# 46    310
+# Filter gene names
+up_genes <- genes_list$genes[genes_list$status == "up"]
+down_genes <- genes_list$genes[genes_list$status == "down"]
+```
+
+
+```{r}
+#reading .txt file with normalised RNAseq data > 532 SCC samples
+dir_path <- "/Users/ankitpatel/Library/Mobile Documents/com~apple~CloudDocs/My Drive/Projects/SCC_bulk_RNAseq_SanofiTempoSeq/"
+
+data <- read.table(file = paste0(dir_path, "exp_data.normalised_no_IS_merged_clean.all_532.txt"), 
+                            row.names = 1, header = TRUE, sep="\t")
+```
+
+
+# running AUCell
+```{r}
+library('AUCell')
+library('Matrix')
+
+run_AUCell_with_assignment <- function(exprMatrix, geneSignature, signatureName="Signature") {
+  # Ensure matrix is in the right format (sparse matrix recommended)
+  if (!inherits(exprMatrix, "dgCMatrix")) {
+    exprMatrix <- as(as.matrix(exprMatrix), "dgCMatrix")
+  }
+  
+#  The exprMatrix for AUCell should be a gene expression matrix with:
+# Rows: Genes (each row is a gene)
+# Columns: Cells (each column is a single cell)
+# Values: Expression values (raw counts, normalized counts, or log-transformed counts; AUCell is robust to the type, but usually people use raw or normalized counts)
+  
+  # Prepare gene set as a list
+  geneSets <- list()
+  geneSets[[signatureName]] <- geneSignature
+  
+  # Build rankings
+  cells_rankings <- AUCell_buildRankings(exprMatrix, plotStats=FALSE)
+  
+  # Calculate AUC
+  cells_AUC <- AUCell_calcAUC(geneSets, cells_rankings)
+  
+  # Thresholding and assignment
+  set.seed(123) # for reproducibility
+  cells_assignment <- AUCell_exploreThresholds(cells_AUC, plotHist=TRUE, assign=TRUE)
+  assignment_vec <- rep("inactive", ncol(exprMatrix))
+  names(assignment_vec) <- colnames(exprMatrix)
+  active_cells <- getAssignments(cells_assignment)[[signatureName]]
+  assignment_vec[active_cells] <- "active"
+  
+  # Prepare output data frame
+  auc_scores <- as.numeric(getAUC(cells_AUC)[signatureName, ])
+  cell_IDs <- colnames(exprMatrix)
+  result_df <- data.frame(
+    cell_ID = cell_IDs,
+    AUC_score = auc_scores,
+    assignment = assignment_vec[cell_IDs],
+    row.names = cell_IDs,
+    stringsAsFactors = FALSE
+  )
+  
+  return(result_df)
+}
+```
+
+# reading CSCC count matrix
+```{r}
+matrix <- readMM(file = "/data/BCI-SingleCell/SCC_Atlas/Sam_Nicholls/AUCell_input.mtx")
+dim(matrix)
+#[1] 335125 2000
+
+t_mat <- t(matrix) #Transposing so cells are columns
+genes <- readLines("genes.txt")      # or read.table("genes.txt")[,1]
+cells <- readLines("barcodes.txt")   # or read.table("barcodes.txt")[,1]
+rownames(t_mat) <- genes
+colnames(t_mat) <- cells
+
+
+#TSK list lo2fc > 1.00 and over
+Gene_set <- c(
+  "MMP1", "LGALS1", "MMP10", "PTHLH", "ODC1", "LAMB3", "ITGB1", "LAMC2", "IGFBP6", "IGFBP2",
+  "SERPINE2", "VIM", "ITGA6", "TGFBI", "MMP9", "SPRR1B", "PLAU", "TNC", "GJB6", "ACTB",
+  "ANXA1", "KRT17", "OCIAD2", "NDUFA4L2", "EMP3", "LAMA3", "CAV1", "IL24", "NDRG1",
+  "S100A6", "TMSB10", "S100A2", "CDKN2A", "SPINK6", "ANXA3", "PHLDA1", "ECM1",
+  "SLC2A1", "TNFRSF12A"
+)
+
+
+```
+
+
+```{r}
+TSK_AUC_score <- run_AUCell_with_assignment(t_mat, Gene_set, signatureName="TSK")
+```
+
+```{r}
+subset(TSK_AUC_score, assignment == 'active')
+TSK_AUC_score
+
+write.csv(TSK_AUC_score, "TSK_AUC_score.csv", row.names = FALSE)
+
+read.csv("TSK_AUC_score.csv")
+```
+```{r}
+#New function to set the threshold manually
+run_AUCell_with_manual_threshold <- function(exprMatrix, geneSignature, signatureName = "Signature", threshold = 0.36) {
+  # Ensure matrix is in the right format (sparse matrix recommended)
+  if (!inherits(exprMatrix, "dgCMatrix")) {
+    exprMatrix <- as(as.matrix(exprMatrix), "dgCMatrix")
+  }
+  
+  # Prepare gene set as a list
+  geneSets <- list()
+  geneSets[[signatureName]] <- geneSignature
+  
+  # Build rankings
+  cells_rankings <- AUCell_buildRankings(exprMatrix, plotStats = FALSE)
+  
+  # Calculate AUC
+  cells_AUC <- AUCell_calcAUC(geneSets, cells_rankings)
+  
+  # Manually assign "active" based on user-defined threshold
+  auc_values <- getAUC(cells_AUC)[signatureName, ]
+  active_cells <- names(which(auc_values > threshold))
+  
+  # Create assignment vector
+  assignment_vec <- rep("inactive", ncol(exprMatrix))
+  names(assignment_vec) <- colnames(exprMatrix)
+  assignment_vec[active_cells] <- "active"
+  
+  # Prepare output data frame
+  auc_scores <- as.numeric(auc_values)
+  cell_IDs <- colnames(exprMatrix)
+  result_df <- data.frame(
+    cell_ID = cell_IDs,
+    AUC_score = auc_scores,
+    assignment = assignment_vec[cell_IDs],
+    row.names = cell_IDs,
+    stringsAsFactors = FALSE
+  )
+  
+  return(result_df)
+}
+
+```
+
+
+```{r}
+TSK_UP_score <- run_AUCell_with_manual_threshold(t_mat, Gene_set, signatureName = "TSK", threshold = 0.5)
+write.csv(TSK_UP_score, "TSK_AUC_score_Threshold_UP.csv", row.names = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
