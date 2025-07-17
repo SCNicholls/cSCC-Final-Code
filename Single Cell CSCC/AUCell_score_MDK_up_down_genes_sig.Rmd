@@ -100,6 +100,7 @@ run_AUCell_with_assignment <- function(exprMatrix, geneSignature, signatureName=
   # Prepare output data frame
   auc_scores <- as.numeric(getAUC(cells_AUC)[signatureName, ])
   cell_IDs <- colnames(exprMatrix)
+  cell_IDs <- make.unique(as.character(cell_IDs))  #Removing some duplicate genes
   result_df <- data.frame(
     cell_ID = cell_IDs,
     AUC_score = auc_scores,
@@ -114,15 +115,15 @@ run_AUCell_with_assignment <- function(exprMatrix, geneSignature, signatureName=
 
 # reading CSCC count matrix
 ```{r}
-matrix <- readMM(file = "/data/BCI-SingleCell/SCC_Atlas/Sam_Nicholls/AUCell_input.mtx")
+matrix <- readMM(file = "/data/BCI-SingleCell/SCC_Atlas/Sam_Nicholls/cSCC_HR.mtx")
 dim(matrix)
-#[1] 335125 2000
+#[1]  2000 335124
 
-t_mat <- t(matrix) #Transposing so cells are columns
+
 genes <- readLines("genes.txt")      # or read.table("genes.txt")[,1]
 cells <- readLines("barcodes.txt")   # or read.table("barcodes.txt")[,1]
-rownames(t_mat) <- genes
-colnames(t_mat) <- cells
+rownames(matrix) <- genes
+colnames(matrix) <- cells
 
 
 #TSK list lo2fc > 1.00 and over
@@ -139,16 +140,28 @@ Gene_set <- c(
 
 
 ```{r}
-TSK_AUC_score <- run_AUCell_with_assignment(t_mat, Gene_set, signatureName="TSK")
+Gene_set_1.25 <- c(
+"MMP10", "PTHLH", "LAMC2", "MMP1", "SERPINE2", "IGFBP6", "ODC1", "LAMB3", "ITGA6", "ITGB1", "PLAU", "LGALS1", "IGFBP2", "TGFBI", "SPRR1B", "VIM", "MMP9"
+)
+```
+
+```{r}
+#Running with genes Logfold >1.25
+TSK_AUC_score_125 <- run_AUCell_with_assignment(matrix, Gene_set_1.25, signatureName="TSK")
+```
+
+```{r}
+#Running with genes Logfold >1
+TSK_AUC_score_1 <- run_AUCell_with_assignment(matrix, Gene_set, signatureName="TSK")
 ```
 
 ```{r}
 subset(TSK_AUC_score, assignment == 'active')
-TSK_AUC_score
+TSK_AUC_score_125
 
-write.csv(TSK_AUC_score, "TSK_AUC_score.csv", row.names = FALSE)
+write.csv(TSK_AUC_score, "TSK_AUC_score_HR.csv", row.names = FALSE)
 
-read.csv("TSK_AUC_score.csv")
+read.csv("TSK_AUC_score_HR.csv")
 ```
 ```{r}
 #New function to set the threshold manually
@@ -180,6 +193,7 @@ run_AUCell_with_manual_threshold <- function(exprMatrix, geneSignature, signatur
   # Prepare output data frame
   auc_scores <- as.numeric(auc_values)
   cell_IDs <- colnames(exprMatrix)
+  cell_IDs <- make.unique(as.character(cell_IDs))  #Removing some duplicate genes
   result_df <- data.frame(
     cell_ID = cell_IDs,
     AUC_score = auc_scores,
@@ -195,8 +209,11 @@ run_AUCell_with_manual_threshold <- function(exprMatrix, geneSignature, signatur
 
 
 ```{r}
-TSK_UP_score <- run_AUCell_with_manual_threshold(t_mat, Gene_set, signatureName = "TSK", threshold = 0.5)
-write.csv(TSK_UP_score, "TSK_AUC_score_Threshold_UP.csv", row.names = FALSE)
+TSK_UP_score <- run_AUCell_with_manual_threshold(matrix, Gene_set_1.25, signatureName = "TSK", threshold = 0.3)
+write.csv(TSK_UP_score, "TSK_AUC_score_Threshold_HR.csv", row.names = FALSE)
+```
+```{r}
+subset(TSK_UP_score, assignment == 'active')
 ```
 
 
