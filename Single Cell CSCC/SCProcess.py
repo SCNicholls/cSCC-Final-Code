@@ -35,14 +35,14 @@ def QC(adata):
         jitter=0.2,
         multi_panel=True,
         rotation=30,
-        save=False,
+        save="_violin.png",
         show=True,
     )
     #### Filter cells according to identified QC thresholds:
     print("Total number of cells: {:d}".format(adata.n_obs))
 
-    # remove cells with more than 20% MT genes
-    adata = adata[adata.obs.pct_counts_mt < 30, :].copy()
+    # remove cells with more than 30% MT genes
+    adata = adata[adata.obs.pct_counts_mt < 10, :].copy()
     print("Number of cells after mt filter: {:d}".format(adata.n_obs))
     sc.pp.filter_cells(adata, min_genes=300)
     print("Number of cells after gene filter: {:d}".format(adata.n_obs))
@@ -169,7 +169,7 @@ def Neighborhood(adata):
 def DE(adata, cluster_key='clusters_r08'):
     #Differential expression analysis
     sc.tl.rank_genes_groups(adata, groupby=cluster_key, method='wilcoxon', pts=True, use_raw=True)
-    sc.pl.rank_genes_groups(adata, n_genes=20, sharey=False)
+    sc.pl.rank_genes_groups(adata, n_genes=20, sharey=False, save='_full_data_deg.png')
     
     pval_thresh = 0.05
     log2fc_thresh = 0.25
@@ -195,7 +195,7 @@ def Runall(adata):
     Integration(adata)
     Neighborhood(adata)
     DE(adata)
-    adata.write_h5ad("/data/BCI-SingleCell/SCC_Atlas/Sam_Nicholls/Combined_adata_object_HR.h5ad") 
+    adata.write_h5ad("/data/BCI-SingleCell/SCC_Atlas/Sam_Nicholls/Combined_adata_object_V3.h5ad") 
     return adata
 
 
